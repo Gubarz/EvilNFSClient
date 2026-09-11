@@ -33,6 +33,7 @@ func main() {
 	cmdFlag := parser.String("c", "cmd", &argparse.Options{Help: "Non-interactive command to run"})
 	helpFlag := parser.Flag("h", "help", &argparse.Options{Help: "Show help"})
 	privPort := parser.Flag("p", "privport", &argparse.Options{Help: "Use privileged port for NFS connection (may require root)"})
+	rootEscape := parser.Flag("r", "root-escape", &argparse.Options{Help: "Forge a filesystem root handle and read outside the export"})
 
 	// Positional args: server (required), export (optional if --list)
 	serverPos := parser.StringPositional(&argparse.Options{Required: true, Help: "NFS server IP/hostname"})
@@ -106,6 +107,13 @@ func main() {
 			fmt.Fprintln(os.Stderr, styles.ExamplesSmallStyle.Render("    sudo setcap 'cap_net_bind_service=+eip' $(which evilnfsclient)"))
 		}
 		os.Exit(1)
+	}
+
+	if *rootEscape {
+		for _, line := range client.RootEscape().Describe() {
+			fmt.Fprintln(os.Stderr, line)
+		}
+		fmt.Fprintln(os.Stderr)
 	}
 
 	// Non-interactive mode
@@ -269,7 +277,9 @@ func printUsage(short bool) {
 		styles.HelpOptStyle.Render("  -c, --command <COMMAND>") + "\n" +
 		styles.HelpDescStyle.Render("    Execute single command without interactive TUI mode") + "\n\n" +
 		styles.HelpOptStyle.Render("  -p, --privport ") + "\n" +
-		styles.HelpDescStyle.Render("    Use privileged port for NFS connection (may require root)")
+		styles.HelpDescStyle.Render("    Use privileged port for NFS connection (may require root)") + "\n\n" +
+		styles.HelpOptStyle.Render("  -r, --root-escape") + "\n" +
+		styles.HelpDescStyle.Render("    Forge a filesystem root handle and read outside the export")
 	fmt.Println(styles.BoxStyle.Width(termWidth - 2).
 		BorderForeground(lipgloss.Color("#4B9BFF")).
 		Foreground(lipgloss.Color("#E0E0E0")).
@@ -291,6 +301,9 @@ func printUsage(short bool) {
 		"",
 		styles.HelpDescStyle.Render("List NFS exports on a server:"),
 		styles.ExamplesSmallStyle.Render("  $ evilnfsclient --list 192.168.1.100"),
+		"",
+		styles.HelpDescStyle.Render("Read outside the export:"),
+		styles.ExamplesSmallStyle.Render("  $ evilnfsclient 192.168.1.100 /shared --root-escape -c 'ls /etc'"),
 		"",
 		styles.HelpDescStyle.Render("Connect with specific UID/GID:"),
 		styles.ExamplesSmallStyle.Render("  $ evilnfsclient 192.168.1.100 /shared --uid 1000 --gid 1000"),
@@ -321,6 +334,7 @@ func checkValidArgs() {
 		"-c": {}, "--cmd": {},
 		"-h": {}, "--help": {},
 		"-p": {}, "--privport": {},
+		"-r": {}, "--root-escape": {},
 	}
 
 	// parse only the arguments (not argv[0])

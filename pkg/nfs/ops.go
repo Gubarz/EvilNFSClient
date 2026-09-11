@@ -18,7 +18,7 @@ func (c *NFSClient) ls(args []string) []string {
 		targetPath = c.resolvePath(args[0])
 	}
 
-	entries, err := c.mount.ReadDirPlus(targetPath)
+	entries, err := c.readEntries(targetPath)
 	if err != nil {
 		return []string{styles.ErrorStyle.Render(fmt.Sprintf("Error: %v", err))}
 	}
@@ -133,7 +133,7 @@ func (c *NFSClient) cd(args []string) []string {
 		c.CurrentPath = path.Clean(targetPath)
 	}
 
-	entries, err := c.mount.ReadDirPlus(c.CurrentPath)
+	entries, err := c.readEntries(c.CurrentPath)
 	if err != nil {
 		c.CurrentPath = "/"
 		return []string{styles.ErrorStyle.Render(fmt.Sprintf("Error: directory not found or not accessible: %v", err))}
@@ -161,7 +161,7 @@ func (c *NFSClient) tree(args []string) []string {
 }
 
 func (c *NFSClient) treeRecursive(dir, prefix string, output *[]string, isLast bool) {
-	entries, err := c.mount.ReadDirPlus(dir)
+	entries, err := c.readEntries(dir)
 	if err != nil {
 		*output = append(*output, prefix+styles.ErrorStyle.Render(fmt.Sprintf("Error: %v", err)))
 		return
@@ -263,13 +263,7 @@ func (c *NFSClient) downloadFile(remotePath, localPath string) []string {
 // doDownloadFile is the shared implementation used by single-file and batch downloads.
 // batch == nil means a standalone single-file transfer.
 func (c *NFSClient) doDownloadFile(remotePath, localPath, name string, batch *batchState) []string {
-	// Best-effort file size for the progress bar
-	var fileTotal int64
-	if info, _, err := c.mount.Lookup(remotePath); err == nil {
-		fileTotal = info.Size()
-	}
-
-	file, err := c.mount.Open(remotePath)
+	file, fileTotal, err := c.openRemote(remotePath)
 	if err != nil {
 		return []string{styles.ErrorStyle.Render(fmt.Sprintf("Error opening remote file: %v", err))}
 	}
@@ -338,7 +332,7 @@ func (c *NFSClient) downloadRecursiveHelper(remoteDir, localDir string, batch *b
 		return
 	}
 
-	entries, err := c.mount.ReadDirPlus(remoteDir)
+	entries, err := c.readEntries(remoteDir)
 	if err != nil {
 		*output = append(*output, styles.ErrorStyle.Render(fmt.Sprintf("Error reading remote dir: %v", err)))
 		return
@@ -362,7 +356,7 @@ func (c *NFSClient) downloadRecursiveHelper(remoteDir, localDir string, batch *b
 
 // countRemoteFilesAndSize recursively counts files and sums their sizes under remoteDir.
 func countRemoteFilesAndSize(c *NFSClient, remoteDir string) (int, int64) {
-	entries, err := c.mount.ReadDirPlus(remoteDir)
+	entries, err := c.readEntries(remoteDir)
 	if err != nil {
 		return 0, 0
 	}
@@ -410,7 +404,7 @@ func (c *NFSClient) mget(args []string) []string {
 		return []string{styles.ErrorStyle.Render(fmt.Sprintf("Error creating destination directory: %v", err))}
 	}
 
-	entries, err := c.mount.ReadDirPlus(dir)
+	entries, err := c.readEntries(dir)
 	if err != nil {
 		return []string{styles.ErrorStyle.Render(fmt.Sprintf("Error: %v", err))}
 	}
@@ -502,7 +496,7 @@ func (c *NFSClient) doUploadFile(localPath, remotePath, name string, batch *batc
 	if strings.HasSuffix(remotePath, "/") {
 		finalRemotePath = path.Join(finalRemotePath, filepath.Base(localPath))
 	} else {
-		entries, err := c.mount.ReadDirPlus(finalRemotePath)
+		entries, err := c.readEntries(finalRemotePath)
 		if err == nil && len(entries) >= 0 {
 			finalRemotePath = path.Join(finalRemotePath, filepath.Base(localPath))
 		}
@@ -737,14 +731,14 @@ func (c *NFSClient) createDirRecursive(targetPath string) []string {
 			currentPath = path.Join(currentPath, part)
 		}
 
-		entries, err := c.mount.ReadDirPlus(currentPath)
+		entries, err := c.readEntries(currentPath)
 		if err == nil && len(entries) > 0 {
 			continue
 		}
 
 		_, err = c.mount.Mkdir(currentPath, 0755)
 		if err != nil {
-			entries, checkErr := c.mount.ReadDirPlus(currentPath)
+			entries, checkErr := c.readEntries(currentPath)
 			if checkErr == nil && len(entries) > 0 {
 				continue
 			}

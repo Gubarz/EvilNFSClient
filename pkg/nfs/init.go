@@ -20,6 +20,8 @@ type NFSClient struct {
 	CurrentPath string
 	localPath   string // Current working directory on the local system
 	progressFn  ProgressFunc
+	privPort    bool
+	escapedFH   []byte
 }
 
 // SetProgressFunc sets a callback that is called periodically during file transfers.
@@ -60,6 +62,7 @@ func NewNFSClient(server, export string, uid, gid uint32, privPort bool) (*NFSCl
 		GID:         gid,
 		CurrentPath: "/",
 		localPath:   localPath,
+		privPort:    privPort,
 	}, nil
 }
 
